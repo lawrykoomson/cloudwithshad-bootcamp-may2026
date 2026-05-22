@@ -15,16 +15,16 @@
   "modules": [
     {
       "n": 1,
-      "status": "coming_soon",
+      "status": "live",
       "week": 1,
-      "title": "Cloud Concepts & the AWS Global Infrastructure",
+      "title": "Introduction to Cloud Computing",
       "subtitle": "Regions, AZs, edge locations \u2014 the foundation",
-      "duration": "",
+      "duration": "7:15",
       "date": "",
-      "youtube": "",
+      "youtube": "L-sNHqakC8w",
       "pdf": "",
       "audio": "",
-      "description": ""
+      "description": "A quick intro to the cloud"
     },
     {
       "n": 2,
