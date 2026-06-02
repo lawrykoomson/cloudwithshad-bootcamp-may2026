@@ -284,11 +284,22 @@
       <table class="field-table">
         <tr><th>Resource</th><th>Value</th></tr>
         <tr><td>VPC CIDR</td><td><code>10.0.0.0/16</code> (65,536 IPs)</td></tr>
-        <tr><td>Public subnet (1a)</td><td><code>10.0.1.0/24</code></td></tr>
+        <tr><td>Public subnet A (1a)</td><td><code>10.0.1.0/24</code> ← we use this one for the EC2</td></tr>
         <tr><td>Private subnet A (1a)</td><td><code>10.0.2.0/24</code></td></tr>
         <tr><td>Private subnet B (1b)</td><td><code>10.0.3.0/24</code></td></tr>
+        <tr><td>Public subnet B (1b)</td><td><code>10.0.4.0/24</code> ← created automatically; unused today</td></tr>
         <tr><td>Region</td><td>Whichever you used in Week 1 (consistency helps)</td></tr>
       </table>
+
+      <div class="callout info">
+        <span class="label">Why two of each?</span>
+        <p>The "VPC and more" wizard creates subnets <strong>symmetrically across AZs</strong> — one of each type per AZ. With 2 AZs that means 2 public + 2 private (it won't let you pick odd numbers). Don't worry about the second public subnet — it costs nothing and you'll appreciate having it the day you add a load balancer.</p>
+      </div>
+
+      <div class="callout note">
+        <span class="label">A note on the exact CIDRs</span>
+        <p>The CIDRs above (10.0.1.0/24, etc.) are illustrative. The wizard will auto-assign slightly different blocks (often <code>/20</code>s like 10.0.0.0/20). That's fine — the <strong>concept</strong> is what matters: public ones for things facing the internet, private ones for things that shouldn't be.</p>
+      </div>
 
       <div class="callout info">
         <span class="label">Why two private subnets?</span>
@@ -328,7 +339,7 @@
           </div>
           <div class="console-mock-field">
             <div class="console-mock-field-label">Number of public subnets</div>
-            <div class="console-mock-input">1</div>
+            <div class="console-mock-input">2 <span style="opacity:.6">(the wizard only offers even numbers — one per AZ)</span></div>
           </div>
           <div class="console-mock-field">
             <div class="console-mock-field-label">Number of private subnets</div>
@@ -345,7 +356,7 @@
         </div>
       </div>
 
-      <p>Click <strong>"Create VPC"</strong>. AWS spins up the VPC, an Internet Gateway, 1 public subnet, 2 private subnets, route tables, and route table associations — all wired correctly. Takes about 90 seconds.</p>
+      <p>Click <strong>"Create VPC"</strong>. AWS spins up the VPC, an Internet Gateway, 2 public subnets, 2 private subnets, route tables, and route table associations — all wired correctly. Takes about 90 seconds.</p>
 
       <div class="callout exam">
         <span class="label">Exam tip</span>
@@ -365,10 +376,10 @@
       <ol>
         <li>Click <strong>"Subnets"</strong> in the left sidebar</li>
         <li>Filter by VPC: select your <code>cloudwithshad-week2</code> VPC</li>
-        <li>You should see 3 subnets: 1 public + 2 private</li>
+        <li>You should see <strong>4 subnets</strong>: 2 public + 2 private</li>
       </ol>
 
-      <p>Click on the <strong>public subnet</strong>, then the <strong>"Route table"</strong> tab. You should see a route like this:</p>
+      <p>Click on either <strong>public subnet</strong>, then the <strong>"Route table"</strong> tab. You should see a route like this:</p>
 
       <div class="code-block">
 <span class="comment"># Public subnet route table</span>
