@@ -450,8 +450,8 @@
       <p>In the <strong>"User data"</strong> field (Advanced details, near the bottom), paste this:</p>
       <div class="code-block">
 <span class="cmd">#!/bin/bash</span>
-yum update -y
-yum install -y nginx mysql
+dnf update -y
+dnf install -y nginx mariadb105
 systemctl start nginx
 systemctl enable nginx
 echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/share/nginx/html/index.html
