@@ -708,39 +708,77 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
 
       <p>In the <strong>"User data"</strong> field (Advanced details, near the bottom), paste this script. It installs MariaDB server, sets up the <code>admin</code> user, and creates the <code>cloudwithshad</code> database — all automatically. (The NAT gateway is what lets <code>dnf install</code> reach the internet from this private subnet.)</p>
 
-      <div class="code-block">
+<div class="code-block">
 <span class="comment">#!/bin/bash</span>
-<span class="comment"># Install MariaDB server (MySQL-compatible, same wire protocol)</span>
+
+<span class="comment"># Log everything for troubleshooting</span>
+exec &gt; &gt;(tee /var/log/cloudwithshad-setup.log)
+exec 2&gt;&amp;1
+
+set -euxo pipefail
+
+DB_PASSWORD="cloudwithshad2026"
+DB_NAME="cloudwithshad"
+DB_USER="admin"
+
+echo "=== Starting database setup ==="
+
+<span class="comment"># Update system</span>
 dnf update -y
+
+<span class="comment"># Install MariaDB server</span>
 dnf install -y mariadb105-server
 
-<span class="comment"># Make MariaDB listen on ALL interfaces so the web-tier can reach it</span>
-<span class="comment"># (default is 127.0.0.1 only — that's why remote connections fail without this)</span>
-cat > /etc/my.cnf.d/cloudwithshad.cnf &lt;&lt;'EOF'
+<span class="comment"># Configure MariaDB to accept remote connections</span>
+cat &gt; /etc/my.cnf.d/cloudwithshad.cnf &lt;&lt;EOF
 [mysqld]
-bind-address = 0.0.0.0
+bind-address=0.0.0.0
 EOF
 
-systemctl start mariadb
+<span class="comment"># Enable and start MariaDB</span>
 systemctl enable mariadb
-sleep 5
+systemctl restart mariadb
 
-<span class="comment"># Create the app user, the cloudwithshad database, and set root password</span>
-<span class="comment"># NOTE: password is hardcoded here for the lab. NEVER do this in production —</span>
-<span class="comment"># use AWS Secrets Manager or Systems Manager Parameter Store instead.</span>
-DB_PASSWORD="cloudwithshad2026"
+<span class="comment"># Wait until MariaDB is actually ready</span>
+echo "Waiting for MariaDB..."
 
-mysql &lt;&lt;MYSQL_SCRIPT
-ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
-CREATE USER 'admin'@'%' IDENTIFIED BY '${DB_PASSWORD}';
-GRANT ALL PRIVILEGES ON *.* TO 'admin'@'%' WITH GRANT OPTION;
-CREATE DATABASE cloudwithshad;
+for i in {1..60}; do
+    if mysqladmin ping --silent; then
+        echo "MariaDB is ready."
+        break
+    fi
+
+    echo "Attempt $i/60..."
+    sleep 2
+done
+
+<span class="comment"># Final readiness check</span>
+mysqladmin ping --silent
+
+<span class="comment"># Configure database and user</span>
+mysql &lt;&lt;EOF
+CREATE DATABASE IF NOT EXISTS ${DB_NAME};
+
+CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASSWORD}';
+
+GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'%';
+
 FLUSH PRIVILEGES;
-MYSQL_SCRIPT
+EOF
 
-<span class="comment"># Log a marker so we can verify the script ran</span>
-echo "cloudwithshad-db ready · $(date)" &gt; /var/log/cloudwithshad-db.log
-      </div>
+<span class="comment"># Verify bind address</span>
+echo "=== Listening ports ==="
+ss -tlnp | grep 3306 || true
+
+<span class="comment"># Verify user creation</span>
+echo "=== MariaDB Users ==="
+mysql -e "SELECT User,Host FROM mysql.user;"
+
+<span class="comment"># Create marker file</span>
+echo "cloudwithshad-db ready - $(date)" &gt; /var/log/cloudwithshad-db.log
+
+echo "=== Database setup completed successfully ==="
+</div>
 
       <p>Click <strong>Launch instance</strong>. Wait <strong>~2 minutes</strong> for the boot + script to finish (downloading MariaDB through NAT is a touch slower than via IGW).</p>
 
