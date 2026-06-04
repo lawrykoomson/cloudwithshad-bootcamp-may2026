@@ -205,7 +205,8 @@
         <a href="#step3" class="sidebar-step"><span class="num"><span>3</span></span>Add subnets &amp; routes</a>
         <a href="#step4" class="sidebar-step"><span class="num"><span>4</span></span>Security groups</a>
         <a href="#step5" class="sidebar-step"><span class="num"><span>5</span></span>Launch EC2 web server</a>
-        <a href="#step6" class="sidebar-step"><span class="num"><span>6</span></span>Provision RDS</a>
+        <a href="#step6" class="sidebar-step"><span class="num"><span>6</span></span>Path A — RDS</a>
+        <a href="#step6b" class="sidebar-step"><span class="num"><span>6b</span></span>Path B — MySQL on EC2</a>
         <a href="#step7" class="sidebar-step"><span class="num"><span>7</span></span>Connect &amp; test</a>
         <a href="#step8" class="sidebar-step"><span class="num"><span>8</span></span>Clean up</a>
       </div>
@@ -284,22 +285,11 @@
       <table class="field-table">
         <tr><th>Resource</th><th>Value</th></tr>
         <tr><td>VPC CIDR</td><td><code>10.0.0.0/16</code> (65,536 IPs)</td></tr>
-        <tr><td>Public subnet A (1a)</td><td><code>10.0.1.0/24</code> ← we use this one for the EC2</td></tr>
+        <tr><td>Public subnet (1a)</td><td><code>10.0.1.0/24</code></td></tr>
         <tr><td>Private subnet A (1a)</td><td><code>10.0.2.0/24</code></td></tr>
         <tr><td>Private subnet B (1b)</td><td><code>10.0.3.0/24</code></td></tr>
-        <tr><td>Public subnet B (1b)</td><td><code>10.0.4.0/24</code> ← created automatically; unused today</td></tr>
         <tr><td>Region</td><td>Whichever you used in Week 1 (consistency helps)</td></tr>
       </table>
-
-      <div class="callout info">
-        <span class="label">Why two of each?</span>
-        <p>The "VPC and more" wizard creates subnets <strong>symmetrically across AZs</strong> — one of each type per AZ. With 2 AZs that means 2 public + 2 private (it won't let you pick odd numbers). Don't worry about the second public subnet — it costs nothing and you'll appreciate having it the day you add a load balancer.</p>
-      </div>
-
-      <div class="callout note">
-        <span class="label">A note on the exact CIDRs</span>
-        <p>The CIDRs above (10.0.1.0/24, etc.) are illustrative. The wizard will auto-assign slightly different blocks (often <code>/20</code>s like 10.0.0.0/20). That's fine — the <strong>concept</strong> is what matters: public ones for things facing the internet, private ones for things that shouldn't be.</p>
-      </div>
 
       <div class="callout info">
         <span class="label">Why two private subnets?</span>
@@ -339,7 +329,7 @@
           </div>
           <div class="console-mock-field">
             <div class="console-mock-field-label">Number of public subnets</div>
-            <div class="console-mock-input">2 <span style="opacity:.6">(the wizard only offers even numbers — one per AZ)</span></div>
+            <div class="console-mock-input">1</div>
           </div>
           <div class="console-mock-field">
             <div class="console-mock-field-label">Number of private subnets</div>
@@ -356,7 +346,7 @@
         </div>
       </div>
 
-      <p>Click <strong>"Create VPC"</strong>. AWS spins up the VPC, an Internet Gateway, 2 public subnets, 2 private subnets, route tables, and route table associations — all wired correctly. Takes about 90 seconds.</p>
+      <p>Click <strong>"Create VPC"</strong>. AWS spins up the VPC, an Internet Gateway, 1 public subnet, 2 private subnets, route tables, and route table associations — all wired correctly. Takes about 90 seconds.</p>
 
       <div class="callout exam">
         <span class="label">Exam tip</span>
@@ -376,10 +366,10 @@
       <ol>
         <li>Click <strong>"Subnets"</strong> in the left sidebar</li>
         <li>Filter by VPC: select your <code>cloudwithshad-week2</code> VPC</li>
-        <li>You should see <strong>4 subnets</strong>: 2 public + 2 private</li>
+        <li>You should see 3 subnets: 1 public + 2 private</li>
       </ol>
 
-      <p>Click on either <strong>public subnet</strong>, then the <strong>"Route table"</strong> tab. You should see a route like this:</p>
+      <p>Click on the <strong>public subnet</strong>, then the <strong>"Route table"</strong> tab. You should see a route like this:</p>
 
       <div class="code-block">
 <span class="comment"># Public subnet route table</span>
@@ -460,8 +450,8 @@
       <p>In the <strong>"User data"</strong> field (Advanced details, near the bottom), paste this:</p>
       <div class="code-block">
 <span class="cmd">#!/bin/bash</span>
-dnf update -y
-dnf install -y nginx mariadb105
+yum update -y
+yum install -y nginx mysql
 systemctl start nginx
 systemctl enable nginx
 echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/share/nginx/html/index.html
@@ -480,15 +470,27 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
     <section class="step" id="step6">
       <div class="step-header">
         <div class="step-num">6</div>
-        <div class="step-title">Provision the RDS database</div>
-        <div class="step-time">15 min</div>
+        <div class="step-title">Provision the database — pick your path</div>
+        <div class="step-time">15-20 min</div>
       </div>
-      <p>Now the fun part. Navigate to <strong>RDS → Databases → Create database</strong>.</p>
+
+      <div class="callout info" style="border-left-color: var(--cyan); background: linear-gradient(90deg, rgba(0,180,216,0.10), rgba(0,180,216,0.02));">
+        <span class="label">🧭 Two paths to the same architecture</span>
+        <p>You have two ways to provision the database tier. Both teach the same two-tier pattern; they just differ in <em>who manages the database</em>.</p>
+        <ul style="margin: 10px 0 0 18px; line-height: 1.7;">
+          <li><strong>Path A — Amazon RDS</strong> (this Step 6): the managed-service way. Production-realistic, but the console has cost traps to navigate.</li>
+          <li><strong>Path B — Self-hosted MySQL on EC2</strong> (Step 6b below): you install MySQL on a second EC2 yourself. 100% free-tier, no surprises, and you learn the fundamentals RDS hides from you.</li>
+        </ul>
+        <p style="margin-top: 10px;"><strong>If you're new or want the lab to "just work," choose Path B.</strong> If you want hands-on with RDS (it's on the Cloud Practitioner exam), choose Path A. <strong>Pick one — you don't need to do both.</strong></p>
+      </div>
+
+      <h3 style="color: var(--navy); margin: 30px 0 12px;">Path A — Provision the RDS database</h3>
+      <p>Navigate to <strong>RDS → Databases → Create database</strong>.</p>
 
       <div class="callout warn">
         <span class="label">⚠️ Cost warning — read before clicking anything</span>
         <p>The RDS console's <em>defaults</em> are <strong>not</strong> free tier. If you just click through, the estimate at the bottom of the page will show somewhere around <strong>$900+/month</strong>. The defaults assume a production database: Multi-AZ cluster, db.m7g.large, 100 GB Provisioned IOPS storage, Secrets Manager, Performance Insights, Enhanced Monitoring — all switched on, all paid.</p>
-        <p>Follow the table below <strong>exactly</strong> and keep an eye on the <em>"Estimated monthly costs"</em> box at the bottom of the page as you fill it in. With the right settings, that estimate should drop to roughly <strong>$0–$15/month</strong> (and $0 if you're still inside the 12-month AWS free tier).</p>
+        <p>Follow the table below <strong>exactly</strong> and keep an eye on the <em>"Estimated monthly costs"</em> box at the bottom of the page as you fill it in. With the right settings, that estimate should drop to roughly <strong>$0–$15/month</strong>.</p>
       </div>
 
       <p>Fill in the form section-by-section. The console is long — work top to bottom.</p>
@@ -505,13 +507,23 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
       <h4 style="color: var(--navy); margin: 20px 0 8px;">Templates</h4>
       <table class="field-table">
         <tr><th>Field</th><th>Value</th></tr>
-        <tr><td>Template</td><td><strong>dev/test</strong> ← critical. (Picking Production  expensive defaults.)</td></tr>
+        <tr><td>Template</td><td><strong>Dev/Test</strong> ← what we use for the lab. Intended for non-production workloads. Avoid <strong>Production</strong> (pre-loads expensive HA defaults).</td></tr>
       </table>
+
+      <div class="callout warn">
+        <span class="label">⚠️ Dev/Test pre-loads three "expensive" defaults — you MUST switch each one</span>
+        <p>Picking Dev/Test is fine for learning, but it silently flips on three things that will cost you money. As you fill in the rest of the form, watch for and override each of these:</p>
+        <ol style="margin: 10px 0 0 18px; line-height: 1.7;">
+          <li><strong>Availability:</strong> Dev/Test defaults to <em>Multi-AZ DB instance</em> (2x cost). <strong>Switch to Single-AZ DB instance deployment (1 instance)</strong> in the next section.</li>
+          <li><strong>Storage autoscaling:</strong> Dev/Test enables autoscaling with a high max. <strong>Turn it OFF</strong> in the Storage section, or set max = 25 GiB.</li>
+          <li><strong>Enhanced Monitoring:</strong> Dev/Test enables it by default (CloudWatch Logs charges). <strong>Uncheck "Enable Enhanced Monitoring"</strong> in the Monitoring section.</li>
+        </ol>
+      </div>
 
       <h4 style="color: var(--navy); margin: 20px 0 8px;">Availability and durability</h4>
       <table class="field-table">
         <tr><th>Field</th><th>Value</th></tr>
-        <tr><td>Deployment option</td><td><strong>Multi-AZ DB instance deployment (2 instance)</strong> ← critical. The other options<strong> will triple</strong> your bill.</td></tr>
+        <tr><td>Deployment option</td><td><strong>Single-AZ DB instance deployment (1 instance)</strong> ← critical. The other options double or triple your bill.</td></tr>
       </table>
 
       <h4 style="color: var(--navy); margin: 20px 0 8px;">Settings</h4>
@@ -524,61 +536,154 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
       <h4 style="color: var(--navy); margin: 20px 0 8px;">Credentials management</h4>
       <table class="field-table">
         <tr><th>Field</th><th>Value</th></tr>
-        <tr><td>Manage credentials</td><td><strong>Self managed</strong> ← important. ("Managed in AWS Secrets Manager" is the new default and adds Secrets Manager charges. We'll manage the password ourselves for this lab.)</td></tr>
-        <tr><td>Master password</td><td>Pick a strong password and save it in your password manager. You'll need it in Step 7.</td></tr>
+        <tr><td>Manage credentials</td><td><strong>Self managed</strong> ← important. ("Managed in AWS Secrets Manager" is the default and adds Secrets Manager charges.)</td></tr>
+        <tr><td>Master password</td><td>Pick a strong password and save it in your password manager.</td></tr>
       </table>
 
       <h4 style="color: var(--navy); margin: 20px 0 8px;">Instance configuration</h4>
       <table class="field-table">
         <tr><th>Field</th><th>Value</th></tr>
-        <tr><td>DB instance class filter</td><td><strong>Burstable classes (includes t classes)</strong>. Also tick <strong>"Include previous generation classes"</strong> so <code>db.t3.micro</code> appears.</td></tr>
-        <tr><td>Instance type</td><td><code>db.t3.micro</code> (free tier) or <code>db.t4g.micro</code> (also free tier, ARM-based — slightly cheaper)</td></tr>
+        <tr><td>DB instance class filter</td><td><strong>Burstable classes</strong>. Also tick <strong>"Include previous generation classes"</strong> so <code>db.t3.micro</code> appears.</td></tr>
+        <tr><td>Instance type</td><td><code>db.t3.micro</code> or <code>db.t4g.micro</code></td></tr>
       </table>
 
       <h4 style="color: var(--navy); margin: 20px 0 8px;">Storage</h4>
       <table class="field-table">
         <tr><th>Field</th><th>Value</th></tr>
-        <tr><td>Storage type</td><td><strong>General Purpose SSD (gp3)</strong> ← critical. The console now <em>defaults to "Provisioned IOPS SSD (io2)"</em>, which costs around <strong>$700/month</strong> on its own. Switch it.</td></tr>
-        <tr><td>Allocated storage</td><td><code>20</code> GiB (free tier covers up to 20 GB)</td></tr>
-        <tr><td>Storage autoscaling</td><td>Leave OFF (or set max to 25 GB) so it can't grow your bill without you noticing</td></tr>
+        <tr><td>Storage type</td><td><strong>General Purpose SSD (gp3)</strong> ← critical. Default is "Provisioned IOPS SSD (io2)", ~$700/month.</td></tr>
+        <tr><td>Allocated storage</td><td><code>20</code> GiB</td></tr>
+        <tr><td>Storage autoscaling</td><td>Leave OFF</td></tr>
       </table>
 
       <h4 style="color: var(--navy); margin: 20px 0 8px;">Connectivity</h4>
       <table class="field-table">
         <tr><th>Field</th><th>Value</th></tr>
-        <tr><td>Compute resource</td><td><strong>Don't connect to an EC2 compute resource</strong>. (The "Connect to EC2" option auto-tweaks security groups for you, but we already set ours up manually in Step 4 — and doing it manually is the point.)</td></tr>
-        <tr><td>Virtual private cloud (VPC)</td><td><code>cloudwithshad-week2</code> ← <strong>NOT</strong> the Default VPC. If yours isn't listed, your subnet group wasn't created — go back to Step 2.</td></tr>
-        <tr><td>DB subnet group</td><td>Choose the one whose name matches your VPC (auto-created by the "VPC and more" wizard). It should list 2 private subnets across 2 AZs.</td></tr>
-        <tr><td>Public access</td><td><strong>No</strong> ← critical. This is the whole point of putting the DB in a private subnet.</td></tr>
+        <tr><td>Compute resource</td><td><strong>Don't connect to an EC2 compute resource</strong></td></tr>
+        <tr><td>VPC</td><td><code>cloudwithshad-week2-vpc</code> ← <strong>NOT</strong> the Default VPC</td></tr>
+        <tr><td>DB subnet group</td><td>Create one with <strong>only the 2 private subnets</strong> (don't use the default group, which often includes public subnets)</td></tr>
+        <tr><td>Public access</td><td><strong>No</strong> ← critical</td></tr>
         <tr><td>VPC security group</td><td>Choose existing → remove <code>default</code>, add <code>db-sg</code></td></tr>
-        <tr><td>RDS Proxy</td><td><strong>Leave OFF</strong> (paid add-on; not needed here)</td></tr>
-        <tr><td>Certificate authority</td><td>Leave the default</td></tr>
+        <tr><td>RDS Proxy</td><td><strong>Leave OFF</strong></td></tr>
       </table>
 
       <h4 style="color: var(--navy); margin: 20px 0 8px;">Monitoring</h4>
       <table class="field-table">
         <tr><th>Field</th><th>Value</th></tr>
-        <tr><td>Database Insights</td><td><strong>Standard</strong> (not Advanced — Advanced is a paid tier)</td></tr>
-        <tr><td>Performance Insights</td><td><strong>Uncheck "Enable Performance Insights"</strong>. It often defaults to ON and bills separately after the free retention period.</td></tr>
-        <tr><td>Enhanced Monitoring</td><td><strong>Uncheck "Enable Enhanced Monitoring"</strong> — CloudWatch Logs charges apply once you switch this on.</td></tr>
-        <tr><td>Log exports</td><td>Leave all unchecked for the lab</td></tr>
+        <tr><td>Database Insights</td><td><strong>Standard</strong> (not Advanced)</td></tr>
+        <tr><td>Performance Insights</td><td><strong>Uncheck "Enable Performance Insights"</strong></td></tr>
+        <tr><td>Enhanced Monitoring</td><td><strong>Uncheck "Enable Enhanced Monitoring"</strong></td></tr>
       </table>
 
       <div class="callout exam">
         <span class="label">Sanity check before you hit Create</span>
-        <p>Scroll to the very bottom of the page. The <strong>"Estimated monthly costs"</strong> box should now show somewhere around <strong>$13–$15/month</strong> (or near $0 if you're inside your 12-month free tier window). If it still says hundreds of dollars, scroll back up — something is set to a paid option. The usual suspects: Storage still on <code>io2</code>, Deployment still on Multi-AZ, or Performance Insights still on.</p>
+        <p>Scroll to the very bottom. The <strong>"Estimated monthly costs"</strong> box should show around <strong>$13–$15/month</strong>. If it still says hundreds, scroll back up — storage may still be io2, deployment still Multi-AZ, or Performance Insights still on.</p>
       </div>
 
-      <p>Hit <strong>Create database</strong>. RDS takes <strong>5–10 minutes</strong> to provision — go make tea.</p>
+      <p>Hit <strong>Create database</strong>. RDS takes 5–10 minutes to provision.</p>
 
       <div class="callout warn">
-        <span class="label">If you see "DB subnet group missing AZ"</span>
-        <p>This means your private subnets aren't spread across 2 AZs. Go back to Step 2 — the VPC wizard should have done this automatically. If not, manually create a DB Subnet Group with one subnet in each AZ.</p>
+        <span class="label">If Path A keeps timing out</span>
+        <p>RDS networking can be finicky in some accounts. If you hit a connection timeout after the database is "Available" — even with security groups looking correct — <strong>just switch to Path B below</strong>. The two-tier architecture concept is identical and Path B works around RDS-specific quirks.</p>
+      </div>
+    </section>
+
+    <!-- STEP 6b — Path B -->
+    <section class="step" id="step6b">
+      <div class="step-header">
+        <div class="step-num">6b</div>
+        <div class="step-title">Path B — Self-hosted MySQL on a second EC2</div>
+        <div class="step-time">15 min</div>
+      </div>
+      <p>If you'd rather skip the RDS console drama: launch a <strong>second EC2 instance</strong> as your database server. We'll install MariaDB (a drop-in MySQL replacement) automatically via the user data script. The two EC2s — <code>cloudwithshad-web</code> and <code>cloudwithshad-db</code> — talk to each other through your security groups exactly like Path A. The architecture is the same; only the database host changes.</p>
+
+      <div class="callout info">
+        <span class="label">What we're building</span>
+        <p>Two EC2s in the same VPC:</p>
+        <ul style="margin: 6px 0 0 18px; line-height: 1.7;">
+          <li><strong>cloudwithshad-web</strong> — the web tier you already launched in Step 5 (public subnet, web-sg)</li>
+          <li><strong>cloudwithshad-db</strong> — new database EC2 (also in a public subnet, but locked down by db-sg so nothing from the internet can reach it)</li>
+        </ul>
+        <p style="margin-top: 10px;">Why public subnet for the DB box? So the user-data script can <code>dnf install</code> MariaDB without needing a NAT gateway (which costs ~$32/mo). Security still comes from db-sg — it allows only SSH and MySQL <strong>from web-sg</strong>, never from the internet. In production you'd use a private subnet + NAT; for the lab this is the pragmatic free choice.</p>
       </div>
 
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.1 — Update db-sg to allow SSH from web-sg</h4>
+      <p>Your existing db-sg already allows MySQL (3306) from web-sg. Add one more rule so your web EC2 can SSH into the db EC2 (for verification later):</p>
+      <ol style="margin: 10px 0 0 18px; line-height: 1.7;">
+        <li>EC2 console → Security Groups → click <code>db-sg</code> → Inbound rules → Edit inbound rules</li>
+        <li>Add rule: Type = <strong>SSH</strong>, Source = <code>web-sg</code> (the SG itself, not a CIDR)</li>
+        <li>Save</li>
+      </ol>
+      <p>Your db-sg should now have two inbound rules:</p>
+      <table class="field-table">
+        <tr><th>Type</th><th>Port</th><th>Source</th></tr>
+        <tr><td>MYSQL/Aurora</td><td>3306</td><td><code>web-sg</code></td></tr>
+        <tr><td>SSH</td><td>22</td><td><code>web-sg</code></td></tr>
+      </table>
+
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.2 — Launch the database EC2</h4>
+      <p>EC2 → <strong>Launch instance</strong>. Use these settings:</p>
+      <table class="field-table">
+        <tr><th>Field</th><th>Value</th></tr>
+        <tr><td>Name</td><td><code>cloudwithshad-db</code></td></tr>
+        <tr><td>AMI</td><td>Amazon Linux 2023 (free tier eligible)</td></tr>
+        <tr><td>Instance type</td><td><code>t2.micro</code> or <code>t3.micro</code> (free tier)</td></tr>
+        <tr><td>Key pair</td><td>Same one you used for the web EC2</td></tr>
+        <tr><td>Network settings</td><td>Edit →</td></tr>
+        <tr><td>VPC</td><td><code>cloudwithshad-week2-vpc</code></td></tr>
+        <tr><td>Subnet</td><td>A <strong>public</strong> subnet (either AZ works — pick the other one from your web EC2 for HA practice)</td></tr>
+        <tr><td>Auto-assign public IP</td><td>Enable (needed for dnf install)</td></tr>
+        <tr><td>Security group</td><td>Select existing → <strong>db-sg</strong> (NOT web-sg)</td></tr>
+      </table>
+
+      <p>In the <strong>"User data"</strong> field (Advanced details, near the bottom), paste this:</p>
+
+      <div class="code-block">
+<span class="comment">#!/bin/bash</span>
+<span class="comment"># Install MariaDB server (MySQL-compatible, same wire protocol)</span>
+dnf update -y
+dnf install -y mariadb105-server
+
+<span class="comment"># Make MariaDB listen on ALL interfaces so the web-tier can reach it</span>
+<span class="comment"># (default is 127.0.0.1 only — that's why remote connections fail without this)</span>
+cat > /etc/my.cnf.d/cloudwithshad.cnf &lt;&lt;'EOF'
+[mysqld]
+bind-address = 0.0.0.0
+EOF
+
+systemctl start mariadb
+systemctl enable mariadb
+sleep 5
+
+<span class="comment"># Create the app user, the cloudwithshad database, and set root password</span>
+<span class="comment"># NOTE: password is hardcoded here for the lab. NEVER do this in production —</span>
+<span class="comment"># use AWS Secrets Manager or Systems Manager Parameter Store instead.</span>
+DB_PASSWORD="cloudwithshad2026"
+
+mysql &lt;&lt;MYSQL_SCRIPT
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+CREATE USER 'admin'@'%' IDENTIFIED BY '${DB_PASSWORD}';
+GRANT ALL PRIVILEGES ON *.* TO 'admin'@'%' WITH GRANT OPTION;
+CREATE DATABASE cloudwithshad;
+FLUSH PRIVILEGES;
+MYSQL_SCRIPT
+
+<span class="comment"># Log a marker so we can verify the script ran</span>
+echo "cloudwithshad-db ready · $(date)" &gt; /var/log/cloudwithshad-db.log
+      </div>
+
+      <p>Click <strong>Launch instance</strong>. Wait <strong>~2 minutes</strong> for the instance to boot and the user data script to complete (the script needs to download MariaDB packages and run the setup SQL).</p>
+
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.3 — Grab the DB EC2's private IP</h4>
+      <p>EC2 console → Instances → click <code>cloudwithshad-db</code> → copy the <strong>Private IPv4 address</strong> (e.g. <code>10.0.x.x</code>). <strong>Don't use the public IP</strong> — your web EC2 reaches the DB EC2 over the VPC's internal network using the private IP.</p>
+
       <div class="callout exam">
-        <span class="label">Exam tip</span>
-        <p>"Public access: No" + DB in a private subnet + DB security group only allowing the web-sg = textbook secure database architecture. Memorise this pattern.</p>
+        <span class="label">Save this for Step 7</span>
+        <p>Path B's "endpoint" is the DB EC2's <strong>private IPv4 address</strong>. Your username/password are <code>admin</code> / <code>cloudwithshad2026</code> (the ones the user data script set up). You'll plug these into the <code>mysql</code> command in Step 7.</p>
+      </div>
+
+      <div class="callout warn">
+        <span class="label">If the connection fails after 2 minutes</span>
+        <p>The user data script needs a moment to finish. If your Step 7 <code>mysql</code> command fails immediately, wait another minute and try again — the package download + database setup typically takes 60–90 seconds total. You can SSH into the db EC2 from your web EC2 and check <code>cat /var/log/cloudwithshad-db.log</code> — if that file exists, the script completed.</p>
       </div>
     </section>
 
@@ -586,28 +691,38 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
     <section class="step" id="step7">
       <div class="step-header">
         <div class="step-num">7</div>
-        <div class="step-title">Connect EC2 to RDS &amp; test</div>
-        <div class="step-time">15 min</div>
+        <div class="step-title">Connect from EC2 to the database &amp; test</div>
+        <div class="step-time">10 min</div>
       </div>
-      <p>Once the RDS database shows <strong>"Available"</strong>, grab its <strong>endpoint</strong> (looks like <code>cloudwithshad-db.xxxxx.eu-west-1.rds.amazonaws.com</code>).</p>
+      <p>This step works the same for both paths — the only difference is the <em>host</em> you connect to.</p>
 
-      <p>SSH into your EC2 web server from your laptop:</p>
+      <table class="field-table">
+        <tr><th>Path you chose</th><th>Host to use</th><th>Username</th><th>Password</th></tr>
+        <tr><td><strong>Path A — RDS</strong></td><td>The RDS endpoint (e.g. <code>cloudwithshad-db.xxxxx.us-east-1.rds.amazonaws.com</code>)</td><td><code>admin</code></td><td>The master password you set in Step 6</td></tr>
+        <tr><td><strong>Path B — EC2 MySQL</strong></td><td>The DB EC2's <strong>private IPv4 address</strong> (e.g. <code>10.0.x.x</code>)</td><td><code>admin</code></td><td><code>cloudwithshad2026</code> (from the user data script)</td></tr>
+      </table>
+
+      <p>SSH into your <strong>web</strong> EC2 from your laptop:</p>
       <div class="code-block">
-<span class="cmd">ssh -i your-key.pem ec2-user@&lt;EC2-PUBLIC-IP&gt;</span>
+<span class="cmd">ssh -i your-key.pem ec2-user@&lt;WEB-EC2-PUBLIC-IP&gt;</span>
       </div>
 
-      <p>Once you're inside the EC2 instance, connect to RDS:</p>
+      <p>Once you're inside the web EC2, connect to the database. <strong>Use this simple form</strong> (don't paste the SSL-flag version the RDS "Connect using" panel suggests — those flags use MySQL-8 syntax the MariaDB client doesn't recognise):</p>
       <div class="code-block">
-<span class="cmd">mysql -h &lt;RDS-ENDPOINT&gt; -u admin -p</span>
-<span class="comment"># When prompted, enter the master password you set</span>
+<span class="comment"># Path A (RDS):</span>
+<span class="cmd">mysql -h cloudwithshad-db.xxxxx.us-east-1.rds.amazonaws.com -u admin -p</span>
+
+<span class="comment"># Path B (EC2 MySQL) — use the DB EC2's private IP:</span>
+<span class="cmd">mysql -h 10.0.x.x -u admin -p</span>
       </div>
 
-      <p>If you see the MySQL prompt (<code>mysql&gt;</code>), <strong>you've done it</strong>. The web tier can talk to the database. Try a query:</p>
-      <div class="code-block">
-<span class="cmd">mysql&gt;</span> CREATE DATABASE cloudwithshad;
-<span class="green">Query OK, 1 row affected (0.01 sec)</span>
+      <p>If you see <code>Welcome to the MariaDB monitor</code> and a <code>MySQL&gt;</code> prompt, <strong>you're in</strong>. (Yes, it says "MariaDB monitor" even when connecting to MySQL 8.4 — that's because we installed the MariaDB <em>client</em>. Same wire protocol, fully compatible.)</p>
 
+      <p>Now try a query:</p>
+      <div class="code-block">
 <span class="cmd">mysql&gt;</span> USE cloudwithshad;
+<span class="green">Database changed</span>
+
 <span class="cmd">mysql&gt;</span> CREATE TABLE students (id INT, name VARCHAR(50));
 <span class="cmd">mysql&gt;</span> INSERT INTO students VALUES (1, 'Your Name');
 <span class="cmd">mysql&gt;</span> SELECT * FROM students;
@@ -623,7 +738,21 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
         <p>Capture that MySQL output and drop it in the cohort WhatsApp group. That's your Week 2 Lab 3 submission. 🎉</p>
       </div>
 
+      <div class="callout exam">
+        <span class="label">📖 Error decoder — what each common error actually means</span>
+        <table class="field-table" style="margin-top: 6px;">
+          <tr><th>Error</th><th>What it really means</th><th>What to check</th></tr>
+          <tr><td><code>ERROR 2003 ... (110)</code> / <code>(115)</code> / <em>connection times out</em></td><td>Network can't reach the DB at all. SYN packet is being dropped before reply.</td><td>1. Web-sg <strong>outbound</strong> rules — must include port 3306 OR "All traffic" to 0.0.0.0/0 (default). <br>2. db-sg <strong>inbound</strong> rule allows MYSQL/3306 from web-sg. <br>3. Same VPC.</td></tr>
+          <tr><td><code>ERROR 1045 ... Access denied for user</code></td><td>🎉 <strong>Good news</strong> — the network works! You reached the database, just with wrong credentials.</td><td>Re-check username/password. For Path B, default is <code>admin</code> / <code>cloudwithshad2026</code>.</td></tr>
+          <tr><td><code>ERROR 2002 ... Connection refused</code></td><td>You reached the host, but nothing is listening on port 3306.</td><td>For Path B: is the DB EC2 still booting? Wait 2 min after launch. Check <code>systemctl status mariadb</code> on the DB EC2.</td></tr>
+          <tr><td><code>mysql: unknown variable 'ssl-mode=...'</code></td><td>You used MySQL-8 SSL flags but have the MariaDB 10.5 client.</td><td>Drop the SSL flags. Use the plain command above.</td></tr>
+        </table>
+      </div>
+
       <div class="callout info">
+        <span class="label">Want to prove it's NOT public? (Path A only)</span>
+        <p>Try connecting to the RDS endpoint from your laptop (not the EC2 instance). It will hang and time out. That's correct behaviour — the database is invisible to the public internet. Only your EC2 can reach it.</p>
+      </div>
         <span class="label">Want to prove it's NOT public?</span>
         <p>Try connecting to the RDS endpoint from your <strong>laptop</strong> (not the EC2 instance). It will hang and time out. That's correct behaviour — the database is invisible to the public internet. Only your EC2 can reach it.</p>
       </div>
@@ -636,14 +765,15 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
         <div class="step-title">Clean up (do not skip!)</div>
         <div class="step-time">10 min</div>
       </div>
-      <p>RDS will burn through your free tier hours if you leave it running 24/7 for the whole month. Once you've taken your screenshot and confirmed it works, clean up.</p>
+      <p>The database tier (RDS or the DB EC2) will burn through your free tier hours if you leave it running 24/7 for the whole month. Once you've taken your screenshot and confirmed it works, clean up.</p>
 
       <div class="cleanup-card">
         <h4>⚠ Cleanup checklist — in this order</h4>
         <ul>
-          <li><strong>RDS:</strong> Databases → select cloudwithshad-db → Actions → Delete → uncheck "Create final snapshot" → type the confirmation phrase → Delete</li>
-          <li><strong>EC2:</strong> Instances → select cloudwithshad-web → Instance state → <strong>Terminate</strong> (not just Stop)</li>
-          <li><strong>VPC:</strong> VPC → Your VPCs → cloudwithshad-week2 → Actions → Delete VPC (this cleans up subnets, route tables, IGW all in one go)</li>
+          <li><strong>If you used Path A — RDS:</strong> Databases → select <code>cloudwithshad-db</code> → Actions → Delete → uncheck "Create final snapshot" → type the confirmation phrase → Delete</li>
+          <li><strong>If you used Path B — EC2 MySQL:</strong> EC2 → Instances → select <code>cloudwithshad-db</code> → Instance state → <strong>Terminate</strong></li>
+          <li><strong>Web EC2:</strong> Instances → select <code>cloudwithshad-web</code> → Instance state → <strong>Terminate</strong> (not just Stop)</li>
+          <li><strong>VPC:</strong> VPC → Your VPCs → <code>cloudwithshad-week2-vpc</code> → Actions → Delete VPC (cleans up subnets, route tables, IGW all in one go)</li>
           <li><strong>Security Groups:</strong> usually deleted with the VPC. Confirm they're gone in EC2 → Security Groups</li>
           <li><strong>Billing:</strong> EC2 → Elastic IPs — make sure you don't have a stranded EIP (those charge $0.005/hr if unattached)</li>
         </ul>
