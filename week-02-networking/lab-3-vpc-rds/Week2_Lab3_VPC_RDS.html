@@ -476,12 +476,12 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
 
       <div class="callout info" style="border-left-color: var(--cyan); background: linear-gradient(90deg, rgba(0,180,216,0.10), rgba(0,180,216,0.02));">
         <span class="label">🧭 Two paths to the same architecture</span>
-        <p>You have two ways to provision the database tier. Both teach the same two-tier pattern; they just differ in <em>who manages the database</em>.</p>
+        <p>You have two ways to provision the database tier. Both teach the same two-tier pattern; they differ in <em>who manages the database</em> and how it's networked.</p>
         <ul style="margin: 10px 0 0 18px; line-height: 1.7;">
-          <li><strong>Path A — Amazon RDS</strong> (this Step 6): the managed-service way. Production-realistic, but the console has cost traps to navigate.</li>
-          <li><strong>Path B — Self-hosted MySQL on EC2</strong> (Step 6b below): you install MySQL on a second EC2 yourself. 100% free-tier, no surprises, and you learn the fundamentals RDS hides from you.</li>
+          <li><strong>Path A — Amazon RDS</strong> (this Step 6): the managed-service way. Free tier eligible, but the console has cost traps to navigate.</li>
+          <li><strong>Path B — Self-hosted MySQL on EC2 in a fresh VPC with NAT</strong> (Step 6b below): you create a new VPC with NAT gateway, then install MySQL on an EC2 in a private subnet. Architecturally cleanest, but <strong>NAT gateway costs ~$1/day until you delete it</strong> — so you MUST clean up the same day.</li>
         </ul>
-        <p style="margin-top: 10px;"><strong>If you're new or want the lab to "just work," choose Path B.</strong> If you want hands-on with RDS (it's on the Cloud Practitioner exam), choose Path A. <strong>Pick one — you don't need to do both.</strong></p>
+        <p style="margin-top: 10px;"><strong>Pick one — you don't need to do both.</strong> If you want the safest free-tier path, Path A. If you want to see a textbook "DB in private subnet" architecture and you'll clean up promptly, Path B.</p>
       </div>
 
       <h3 style="color: var(--navy); margin: 30px 0 12px;">Path A — Provision the RDS database</h3>
@@ -591,51 +591,122 @@ echo "&lt;h1&gt;cloudwithshad · two-tier app running&lt;/h1&gt;" &gt; /usr/shar
     <section class="step" id="step6b">
       <div class="step-header">
         <div class="step-num">6b</div>
-        <div class="step-title">Path B — Self-hosted MySQL on a second EC2</div>
-        <div class="step-time">15 min</div>
+        <div class="step-title">Path B — Self-hosted MySQL in a private subnet (with NAT)</div>
+        <div class="step-time">25 min</div>
       </div>
-      <p>If you'd rather skip the RDS console drama: launch a <strong>second EC2 instance</strong> as your database server. We'll install MariaDB (a drop-in MySQL replacement) automatically via the user data script. The two EC2s — <code>cloudwithshad-web</code> and <code>cloudwithshad-db</code> — talk to each other through your security groups exactly like Path A. The architecture is the same; only the database host changes.</p>
+      <p>This path gives you the <strong>textbook two-tier architecture</strong> — database in a private subnet, no public IP, NAT gateway for outbound internet. We're going to <strong>create a fresh VPC</strong> using the same "VPC and more" wizard, this time with <strong>NAT gateways enabled</strong>. That's the only real difference. Then we'll launch a new web EC2 and a new db EC2 inside it.</p>
+
+      <div class="callout warn">
+        <span class="label">⚠️ Cost warning — NAT gateway is NOT free tier</span>
+        <p>A NAT gateway costs <strong>~$0.045/hour (~$1/day, ~$32/month)</strong> whether or not anything uses it. As long as you complete this lab and clean up <strong>the same day</strong>, total cost is around <strong>$0.10–$0.30</strong>. If you forget to clean up, it's $1/day. <strong>Set a calendar reminder right now</strong> to delete the VPC after this lab. Deleting the VPC kills the NAT gateway — that's what stops the bill.</p>
+      </div>
 
       <div class="callout info">
-        <span class="label">What we're building</span>
-        <p>Two EC2s in the same VPC:</p>
-        <ul style="margin: 6px 0 0 18px; line-height: 1.7;">
-          <li><strong>cloudwithshad-web</strong> — the web tier you already launched in Step 5 (public subnet, web-sg)</li>
-          <li><strong>cloudwithshad-db</strong> — new database EC2 (also in a public subnet, but locked down by db-sg so nothing from the internet can reach it)</li>
-        </ul>
-        <p style="margin-top: 10px;">Why public subnet for the DB box? So the user-data script can <code>dnf install</code> MariaDB without needing a NAT gateway (which costs ~$32/mo). Security still comes from db-sg — it allows only SSH and MySQL <strong>from web-sg</strong>, never from the internet. In production you'd use a private subnet + NAT; for the lab this is the pragmatic free choice.</p>
+        <span class="label">Why a brand new VPC for Path B?</span>
+        <p>Security groups belong to a VPC — they can't be reused across VPCs. Since we want NAT in this architecture, and NAT is easiest to set up via the wizard at VPC creation, we just start fresh. It's a few extra minutes but you'll see the wizard create everything (VPC, subnets, NAT, routes) in one shot.</p>
       </div>
 
-      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.1 — Update db-sg to allow SSH from web-sg</h4>
-      <p>Your existing db-sg already allows MySQL (3306) from web-sg. Add one more rule so your web EC2 can SSH into the db EC2 (for verification later):</p>
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.1 — Terminate the Step 5 web EC2 (save free-tier hours)</h4>
+      <p>Since we're rebuilding in a new VPC, the old web EC2 from Step 5 just costs you free-tier hours. Terminate it:</p>
       <ol style="margin: 10px 0 0 18px; line-height: 1.7;">
-        <li>EC2 console → Security Groups → click <code>db-sg</code> → Inbound rules → Edit inbound rules</li>
-        <li>Add rule: Type = <strong>SSH</strong>, Source = <code>web-sg</code> (the SG itself, not a CIDR)</li>
-        <li>Save</li>
+        <li>EC2 → Instances → select <code>cloudwithshad-web</code></li>
+        <li>Instance state → <strong>Terminate</strong></li>
       </ol>
-      <p>Your db-sg should now have two inbound rules:</p>
+
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.2 — Create the new VPC (with NAT)</h4>
+      <p>VPC → <strong>Create VPC</strong> → select <strong>"VPC and more"</strong>. Same as Step 2, with ONE crucial difference:</p>
+
+      <div class="console-mock">
+        <div class="console-mock-header"><span class="aws-tag">aws</span> VPC → Create VPC</div>
+        <div class="console-mock-body">
+          <div class="console-mock-field">
+            <div class="console-mock-field-label">Name tag auto-generation</div>
+            <div class="console-mock-input">cloudwithshad-pathb</div>
+          </div>
+          <div class="console-mock-field">
+            <div class="console-mock-field-label">IPv4 CIDR block</div>
+            <div class="console-mock-input">10.1.0.0/16 <span style="opacity:.6">(different from Path A so they don't conflict)</span></div>
+          </div>
+          <div class="console-mock-field">
+            <div class="console-mock-field-label">Number of Availability Zones (AZs)</div>
+            <div class="console-mock-input">2</div>
+          </div>
+          <div class="console-mock-field">
+            <div class="console-mock-field-label">Number of public subnets</div>
+            <div class="console-mock-input">2</div>
+          </div>
+          <div class="console-mock-field">
+            <div class="console-mock-field-label">Number of private subnets</div>
+            <div class="console-mock-input">2</div>
+          </div>
+          <div class="console-mock-field">
+            <div class="console-mock-field-label">NAT gateways</div>
+            <div class="console-mock-input" style="background: rgba(244,185,66,0.15); font-weight: 600;">In 1 AZ ← critical change (NOT "None", NOT "1 per AZ")</div>
+          </div>
+          <div class="console-mock-field">
+            <div class="console-mock-field-label">VPC endpoints</div>
+            <div class="console-mock-input">None</div>
+          </div>
+        </div>
+      </div>
+
+      <p><strong>"In 1 AZ"</strong> is the cheapest option (~$32/mo). "1 per AZ" doubles that to ~$64/mo. For learning, one NAT in one AZ is plenty — your private subnet in the other AZ will route through it across AZs (technically a small data charge for cross-AZ traffic, negligible for the lab).</p>
+
+      <p>Click <strong>Create VPC</strong>. The wizard takes ~2 minutes this time (NAT gateway provisioning adds time vs no-NAT). When it finishes, the resource map will show: VPC + 4 subnets + IGW + 1 NAT gateway + route tables, all wired correctly.</p>
+
+      <div class="callout exam">
+        <span class="label">What just happened under the hood</span>
+        <p>The wizard created a NAT gateway in one of your public subnets, attached an Elastic IP to it, and updated both private subnets' route tables to add <code>0.0.0.0/0 → nat-gateway</code>. Your private subnets now have <strong>outbound</strong> internet access (for things like <code>dnf install</code>) but no <strong>inbound</strong> internet access. That's exactly what we want for the DB tier.</p>
+      </div>
+
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.3 — Create security groups in the new VPC</h4>
+      <p>Security groups are VPC-scoped, so the ones from Step 4 don't exist in this new VPC. Quickly recreate them — same rules as before:</p>
+
+      <p><strong>web-sg</strong> (EC2 → Security Groups → Create security group):</p>
+      <ul style="margin: 6px 0 0 18px; line-height: 1.7;">
+        <li>Name: <code>web-sg</code>, VPC: <code>cloudwithshad-pathb-vpc</code></li>
+        <li>Inbound: SSH (22) from My IP, HTTP (80) from 0.0.0.0/0, HTTPS (443) from 0.0.0.0/0</li>
+        <li>Outbound: <strong>leave the default "All traffic → 0.0.0.0/0"</strong> ← don't replace this with specific port rules, or your web EC2 won't be able to reach the DB EC2</li>
+      </ul>
+
+      <p><strong>db-sg</strong>:</p>
+      <ul style="margin: 6px 0 0 18px; line-height: 1.7;">
+        <li>Name: <code>db-sg</code>, VPC: <code>cloudwithshad-pathb-vpc</code></li>
+        <li>Inbound rule 1: MYSQL/Aurora (3306), Source = <code>web-sg</code> (the SG itself)</li>
+        <li>Inbound rule 2: SSH (22), Source = <code>web-sg</code> (so you can SSH from web to db for verification)</li>
+        <li>Outbound: leave the default "All traffic → 0.0.0.0/0"</li>
+      </ul>
+
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.4 — Launch the new web EC2 (in the new VPC)</h4>
+      <p>EC2 → Launch instance. Same as Step 5, but in the new VPC:</p>
       <table class="field-table">
-        <tr><th>Type</th><th>Port</th><th>Source</th></tr>
-        <tr><td>MYSQL/Aurora</td><td>3306</td><td><code>web-sg</code></td></tr>
-        <tr><td>SSH</td><td>22</td><td><code>web-sg</code></td></tr>
+        <tr><th>Field</th><th>Value</th></tr>
+        <tr><td>Name</td><td><code>cloudwithshad-web</code></td></tr>
+        <tr><td>AMI</td><td>Amazon Linux 2023</td></tr>
+        <tr><td>Instance type</td><td><code>t2.micro</code> or <code>t3.micro</code></td></tr>
+        <tr><td>Key pair</td><td>Your existing key from Week 1</td></tr>
+        <tr><td>VPC</td><td><code>cloudwithshad-pathb-vpc</code></td></tr>
+        <tr><td>Subnet</td><td>A <strong>public</strong> subnet (e.g. <code>cloudwithshad-pathb-subnet-public1-...</code>)</td></tr>
+        <tr><td>Auto-assign public IP</td><td>Enable</td></tr>
+        <tr><td>Security group</td><td>Select existing → <strong>web-sg</strong></td></tr>
+        <tr><td>User data</td><td>Same script as Step 5 (nginx + mariadb105 client + placeholder page)</td></tr>
       </table>
 
-      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.2 — Launch the database EC2</h4>
-      <p>EC2 → <strong>Launch instance</strong>. Use these settings:</p>
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.5 — Launch the database EC2 (in a PRIVATE subnet)</h4>
+      <p>EC2 → Launch instance:</p>
       <table class="field-table">
         <tr><th>Field</th><th>Value</th></tr>
         <tr><td>Name</td><td><code>cloudwithshad-db</code></td></tr>
-        <tr><td>AMI</td><td>Amazon Linux 2023 (free tier eligible)</td></tr>
-        <tr><td>Instance type</td><td><code>t2.micro</code> or <code>t3.micro</code> (free tier)</td></tr>
-        <tr><td>Key pair</td><td>Same one you used for the web EC2</td></tr>
-        <tr><td>Network settings</td><td>Edit →</td></tr>
-        <tr><td>VPC</td><td><code>cloudwithshad-week2-vpc</code></td></tr>
-        <tr><td>Subnet</td><td>A <strong>public</strong> subnet (either AZ works — pick the other one from your web EC2 for HA practice)</td></tr>
-        <tr><td>Auto-assign public IP</td><td>Enable (needed for dnf install)</td></tr>
-        <tr><td>Security group</td><td>Select existing → <strong>db-sg</strong> (NOT web-sg)</td></tr>
+        <tr><td>AMI</td><td>Amazon Linux 2023</td></tr>
+        <tr><td>Instance type</td><td><code>t2.micro</code> or <code>t3.micro</code></td></tr>
+        <tr><td>Key pair</td><td>Same key as the web EC2</td></tr>
+        <tr><td>VPC</td><td><code>cloudwithshad-pathb-vpc</code></td></tr>
+        <tr><td>Subnet</td><td>A <strong>PRIVATE</strong> subnet (e.g. <code>cloudwithshad-pathb-subnet-private1-...</code>) ← this is the architectural win</td></tr>
+        <tr><td>Auto-assign public IP</td><td><strong>Disable</strong> (it's in a private subnet — no public IP needed; NAT handles outbound)</td></tr>
+        <tr><td>Security group</td><td>Select existing → <strong>db-sg</strong></td></tr>
       </table>
 
-      <p>In the <strong>"User data"</strong> field (Advanced details, near the bottom), paste this:</p>
+      <p>In the <strong>"User data"</strong> field (Advanced details, near the bottom), paste this script. It installs MariaDB server, sets up the <code>admin</code> user, and creates the <code>cloudwithshad</code> database — all automatically. (The NAT gateway is what lets <code>dnf install</code> reach the internet from this private subnet.)</p>
 
       <div class="code-block">
 <span class="comment">#!/bin/bash</span>
@@ -671,19 +742,19 @@ MYSQL_SCRIPT
 echo "cloudwithshad-db ready · $(date)" &gt; /var/log/cloudwithshad-db.log
       </div>
 
-      <p>Click <strong>Launch instance</strong>. Wait <strong>~2 minutes</strong> for the instance to boot and the user data script to complete (the script needs to download MariaDB packages and run the setup SQL).</p>
+      <p>Click <strong>Launch instance</strong>. Wait <strong>~2 minutes</strong> for the boot + script to finish (downloading MariaDB through NAT is a touch slower than via IGW).</p>
 
-      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.3 — Grab the DB EC2's private IP</h4>
-      <p>EC2 console → Instances → click <code>cloudwithshad-db</code> → copy the <strong>Private IPv4 address</strong> (e.g. <code>10.0.x.x</code>). <strong>Don't use the public IP</strong> — your web EC2 reaches the DB EC2 over the VPC's internal network using the private IP.</p>
+      <h4 style="color: var(--navy); margin: 20px 0 8px;">Step 6b.6 — Grab the DB EC2's private IP</h4>
+      <p>EC2 → Instances → click <code>cloudwithshad-db</code> → copy the <strong>Private IPv4 address</strong> (e.g. <code>10.1.x.x</code>). This is your "endpoint" for Path B.</p>
 
       <div class="callout exam">
         <span class="label">Save this for Step 7</span>
-        <p>Path B's "endpoint" is the DB EC2's <strong>private IPv4 address</strong>. Your username/password are <code>admin</code> / <code>cloudwithshad2026</code> (the ones the user data script set up). You'll plug these into the <code>mysql</code> command in Step 7.</p>
+        <p>Path B's "endpoint" is the DB EC2's <strong>private IPv4 address</strong>. Username/password: <code>admin</code> / <code>cloudwithshad2026</code>. You'll plug these into the <code>mysql</code> command in Step 7 from your <strong>new</strong> web EC2 (the one you just launched in the new VPC).</p>
       </div>
 
       <div class="callout warn">
-        <span class="label">If the connection fails after 2 minutes</span>
-        <p>The user data script needs a moment to finish. If your Step 7 <code>mysql</code> command fails immediately, wait another minute and try again — the package download + database setup typically takes 60–90 seconds total. You can SSH into the db EC2 from your web EC2 and check <code>cat /var/log/cloudwithshad-db.log</code> — if that file exists, the script completed.</p>
+        <span class="label">If the user data didn't finish (rare but possible)</span>
+        <p>SSH from the web EC2 into the db EC2 using its private IP, then check: <code>cat /var/log/cloudwithshad-db.log</code>. If the file doesn't exist, the script is still running — wait a minute and try again. If after 5 minutes it still hasn't run, check the EC2's system log (EC2 → instance → Actions → Monitor and troubleshoot → Get system log).</p>
       </div>
     </section>
 
@@ -765,17 +836,17 @@ echo "cloudwithshad-db ready · $(date)" &gt; /var/log/cloudwithshad-db.log
         <div class="step-title">Clean up (do not skip!)</div>
         <div class="step-time">10 min</div>
       </div>
-      <p>The database tier (RDS or the DB EC2) will burn through your free tier hours if you leave it running 24/7 for the whole month. Once you've taken your screenshot and confirmed it works, clean up.</p>
+      <p>The database tier (RDS or the DB EC2) will burn through your free tier hours if left running. <strong>If you used Path B, the NAT gateway is also burning ~$1/day until you delete the VPC.</strong> Clean up immediately after your screenshot.</p>
 
       <div class="cleanup-card">
         <h4>⚠ Cleanup checklist — in this order</h4>
         <ul>
-          <li><strong>If you used Path A — RDS:</strong> Databases → select <code>cloudwithshad-db</code> → Actions → Delete → uncheck "Create final snapshot" → type the confirmation phrase → Delete</li>
-          <li><strong>If you used Path B — EC2 MySQL:</strong> EC2 → Instances → select <code>cloudwithshad-db</code> → Instance state → <strong>Terminate</strong></li>
-          <li><strong>Web EC2:</strong> Instances → select <code>cloudwithshad-web</code> → Instance state → <strong>Terminate</strong> (not just Stop)</li>
-          <li><strong>VPC:</strong> VPC → Your VPCs → <code>cloudwithshad-week2-vpc</code> → Actions → Delete VPC (cleans up subnets, route tables, IGW all in one go)</li>
-          <li><strong>Security Groups:</strong> usually deleted with the VPC. Confirm they're gone in EC2 → Security Groups</li>
-          <li><strong>Billing:</strong> EC2 → Elastic IPs — make sure you don't have a stranded EIP (those charge $0.005/hr if unattached)</li>
+          <li><strong>Path B users — DO THIS FIRST:</strong> VPC → Your VPCs → <code>cloudwithshad-pathb-vpc</code> → Actions → <strong>Delete VPC</strong>. This deletes the NAT gateway, EIP, subnets, route tables, security groups, AND the EC2s' network attachments all in one shot. Stops the NAT bill immediately.</li>
+          <li><strong>Path B EC2 instances</strong> (if not gone with the VPC): EC2 → Instances → terminate both <code>cloudwithshad-web</code> and <code>cloudwithshad-db</code> in the pathb VPC</li>
+          <li><strong>Path A — RDS:</strong> Databases → select <code>cloudwithshad-db</code> → Actions → Delete → uncheck "Create final snapshot" → type the confirmation phrase → Delete</li>
+          <li><strong>Path A — Web EC2:</strong> Instances → select <code>cloudwithshad-web</code> → Instance state → <strong>Terminate</strong></li>
+          <li><strong>Path A — VPC:</strong> VPC → Your VPCs → <code>cloudwithshad-week2-vpc</code> → Actions → Delete VPC</li>
+          <li><strong>Stranded resources:</strong> EC2 → Elastic IPs → release any unattached EIPs ($0.005/hr if unattached). Also check VPC → NAT gateways to confirm no NAT is still alive.</li>
         </ul>
       </div>
 
