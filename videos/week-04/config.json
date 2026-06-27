@@ -18,14 +18,22 @@
     {
       "title": "AWS AI Services Tour",
       "topics": "Textract, Comprehend, Rekognition — what they do and when to use them",
-      "duration": "",
-      "youtube": ""
+      "duration": "1:32:37",
+      "youtube": "EtroU4833Tg"
     },
     {
-      "title": "Building the Capstone",
-      "topics": "Wiring the AI services into a real document-analysis pipeline",
-      "duration": "",
-      "youtube": ""
+      "title": "Building a career in Data and AI | Guest Talk | Co-founder of Ishango.ai",
+      "topics": "Escaping hype and building solid foundations",
+      "duration": "1:17",
+      "youtube": "S876VkHTca4"
     }
+    ,
+    {
+      "title": "How AI is Solving Real Human Problems | Guest Talk | Senior Data Scientist @Ishango.ai",
+      "topics": "Building what really matters",
+      "duration": "1:17",
+      "youtube": "2N9SYS3gAPc"
+    }
+
   ]
 }
